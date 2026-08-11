@@ -1,0 +1,144 @@
+// Shoeniverse IT & MIS System — database schema
+// Run `npx prisma generate` after `npm install` to build the client.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  IT_USER
+
+  @@map("role")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+
+  @@map("user_status")
+}
+
+enum ComplaintStatus {
+  PENDING
+  DEVICE_COLLECTED
+  ON_PROCESS
+  DONE
+  CANCELLED
+
+  @@map("complaint_status")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  fullName     String     @map("full_name")
+  userId       String     @unique @map("user_id")
+  passwordHash String     @map("password_hash")
+  email        String?
+  phone        String?
+  designation  String?
+  department   String?
+  role         Role       @default(IT_USER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  lastLogin    DateTime?  @map("last_login")
+
+  complaintsCreated Complaint[]             @relation("ComplaintCreatedBy")
+  statusChanges     ComplaintStatusHistory[] @relation("StatusChangedBy")
+  activityLogs      ActivityLog[]           @relation("ActivityUser")
+
+  @@index([status])
+  @@index([role])
+  @@map("users")
+}
+
+model Complaint {
+  id                    String          @id @default(uuid())
+  ticketId              String          @unique @map("ticket_id")
+
+  complainerName        String          @map("complainer_name")
+  complainerDesignation String          @map("complainer_designation")
+  complainerDepartment  String          @map("complainer_department")
+  complainerPhone       String          @map("complainer_phone")
+
+  deviceName            String          @map("device_name")
+  deviceModel            String?         @map("device_model")
+  deviceSerial           String?         @map("device_serial")
+  assetId                 String?         @map("asset_id")
+  location                String?
+  priority                String?         @default("Normal")
+
+  complaintDetails        String          @map("complaint_details") @db.Text
+
+  currentStatus            ComplaintStatus @default(PENDING) @map("current_status")
+
+  createdById               String          @map("created_by")
+  createdBy                 User            @relation("ComplaintCreatedBy", fields: [createdById], references: [id])
+
+  createdAt                 DateTime        @default(now()) @map("created_at")
+  updatedAt                 DateTime        @updatedAt @map("updated_at")
+
+  statusHistory              ComplaintStatusHistory[]
+  activityLogs                ActivityLog[]
+
+  @@index([currentStatus])
+  @@index([complainerDepartment])
+  @@index([createdAt])
+  @@index([createdById])
+  @@map("complaints")
+}
+
+model ComplaintStatusHistory {
+  id             String          @id @default(uuid())
+  complaintId    String          @map("complaint_id")
+  complaint      Complaint       @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  previousStatus ComplaintStatus? @map("previous_status")
+  newStatus      ComplaintStatus  @map("new_status")
+  remarks        String?
+
+  changedById    String?          @map("changed_by")
+  changedBy      User?            @relation("StatusChangedBy", fields: [changedById], references: [id])
+
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@index([complaintId])
+  @@index([createdAt])
+  @@map("complaint_status_history")
+}
+
+model ActivityLog {
+  id                  String     @id @default(uuid())
+  userId              String?    @map("user_id")
+  user                User?      @relation("ActivityUser", fields: [userId], references: [id])
+
+  action              String
+  description          String?
+
+  relatedComplaintId    String?    @map("related_complaint_id")
+  relatedComplaint       Complaint? @relation(fields: [relatedComplaintId], references: [id])
+
+  ipAddress               String?    @map("ip_address")
+  createdAt                DateTime   @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// Backing table for daily-reset, race-free ticket ID sequencing.
+// One row per calendar date (Asia/Dhaka); incremented atomically inside
+// the same transaction as complaint creation. See src/lib/ticketId.ts.
+model DailyTicketCounter {
+  ticketDate  DateTime @id @map("ticket_date") @db.Date
+  lastNumber  Int      @default(0) @map("last_number")
+
+  @@map("daily_ticket_counters")
+}
