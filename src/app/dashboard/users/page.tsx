@@ -20,7 +20,7 @@ interface UserRow {
 const emptyNewUser = {
   fullName: "", userId: "", password: "", confirmPassword: "",
   email: "", phone: "", designation: "", department: "",
-  role: "IT_USER" as const, status: "ACTIVE" as const,
+  role: "IT_USER" as "ADMIN" | "IT_USER", status: "ACTIVE" as const,
 };
 
 export default function UserManagementPage() {
